@@ -590,7 +590,12 @@ mod tests {
         d.stored_enchantments
             .push((Arc::from("minecraft:sharpness"), 2));
         d.repair_cost = 9;
-        d.custom_name = Some("Keeper".to_owned());
+        // A styled name keeps its style across the wire.
+        let keeper = Tag::compound([
+            ("color", Tag::String("gold".into())),
+            ("text", Tag::String("Keeper".into())),
+        ]);
+        d.custom_name = Some(keeper.clone());
         // A translatable item name reaches the client as the same component.
         let item_name = Tag::compound([("translate", Tag::String("filled_map.monument".into()))]);
         d.other
@@ -623,7 +628,7 @@ mod tests {
             vec![(Arc::from("minecraft:sharpness"), 2)]
         );
         assert_eq!(d.repair_cost, 9);
-        assert_eq!(d.custom_name.as_deref(), Some("Keeper"));
+        assert_eq!(d.custom_name, Some(keeper));
         assert_eq!(d.other("minecraft:item_name"), Some(&item_name));
         assert_eq!(
             d.trim,

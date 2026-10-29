@@ -1716,7 +1716,7 @@ impl Game<'_> {
     /// item name component, else the item's or potion's name.
     fn stack_hover_name(&self, stack: &ItemStack) -> String {
         if let Some(n) = stack.custom_name() {
-            n.to_owned()
+            n
         } else if let Some(title) = stack
             .data()
             .and_then(|d| d.written.as_ref())
@@ -1755,12 +1755,10 @@ impl Game<'_> {
         let display = horizon_client::item_tooltip::TooltipDisplay::for_stack(stack);
         let mut lines = Vec::new();
         if !nested && display.name_visible(self.screen == Screen::Creative) {
-            // `getStyledHoverName`: a custom name is italic.
-            let name = self.stack_hover_name(stack);
-            let name = if stack.custom_name().is_some() {
-                horizon_client::text::Text::literal(name).italic()
-            } else {
-                horizon_client::text::Text::legacy(&name)
+            // `getStyledHoverName`: a custom name is italic, under its own style.
+            let name = match stack.custom_name_text() {
+                Some(name) => name.italic(),
+                None => horizon_client::text::Text::legacy(&self.stack_hover_name(stack)),
             };
             lines.push((name, color));
         }
@@ -1788,7 +1786,6 @@ impl Game<'_> {
         // ItemContainerContents.addToTooltip.
         let hover_name = |s: &ItemStack| {
             s.custom_name()
-                .map(str::to_owned)
                 .or_else(|| s.item_name())
                 .unwrap_or_else(|| self.pack.names.display_item(&s.item))
         };

@@ -218,7 +218,7 @@ pub fn name_line(stack: &ItemStack, translate: &dyn Fn(&str) -> Option<String>) 
         .split_once(':')
         .unwrap_or(("minecraft", &stack.item));
     if let Some(name) = stack.custom_name() {
-        return name.to_owned();
+        return name;
     }
     if let Some(name) = stack.item_name() {
         return name;
@@ -951,7 +951,7 @@ mod tests {
         assert_eq!(name_line(&banner, &translate), "Ominous Banner");
         assert_eq!(name_line(&banner, &|_| None), "Ominous Banner");
         assert_eq!(rarity(&banner, "common"), "uncommon");
-        banner.data_mut().custom_name = Some("Captain's Standard".into());
+        banner.data_mut().custom_name = Some(Tag::String("Captain's Standard".into()));
         assert_eq!(name_line(&banner, &translate), "Captain's Standard");
         let mut custom_item = ItemStack::new("minecraft:diamond_sword", 1);
         custom_item.data_mut().other.push((
@@ -959,7 +959,7 @@ mod tests {
             Tag::String("Excalibur".into()),
         ));
         assert_eq!(name_line(&custom_item, &translate), "Excalibur");
-        custom_item.data_mut().custom_name = Some("Custom Blade".into());
+        custom_item.data_mut().custom_name = Some(Tag::String("Custom Blade".into()));
         assert_eq!(name_line(&custom_item, &translate), "Custom Blade");
         banner.enchant("minecraft:unbreaking", 1);
         assert_eq!(rarity(&banner, "common"), "rare");

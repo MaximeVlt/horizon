@@ -16,8 +16,8 @@ pub struct StackData {
     pub stored_enchantments: Levels,
     /// `minecraft:repair_cost` (anvil prior-work penalty).
     pub repair_cost: u32,
-    /// `minecraft:custom_name` as plain text.
-    pub custom_name: Option<String>,
+    /// `minecraft:custom_name`: the text component as saved, style included.
+    pub custom_name: Option<Tag>,
     /// `minecraft:potion_contents.potion`.
     pub potion: Option<Arc<str>>,
     /// `minecraft:trim`: (material, pattern).
@@ -125,11 +125,11 @@ impl StackData {
         self.other.iter().find(|(k, _)| k == id).map(|(_, v)| v)
     }
     /// `SetNameFunction.run`: a loot text component stored as `custom_name`
-    /// (plain text, as modelled) or as the unmodelled `item_name`.
+    /// or as the unmodelled `item_name`.
     pub fn set_loot_name(&mut self, id: &str, text: &serde_json::Value) {
         let tag = horizon_client_core::scoreboard::json_to_tag(text);
         if id == "minecraft:custom_name" {
-            self.custom_name = read_text(&tag);
+            self.custom_name = text_tag(&tag);
         } else {
             self.set_other(id, Some(tag));
         }
@@ -148,7 +148,7 @@ impl StackData {
                     _ => None,
                 };
             }
-            "minecraft:custom_name" => self.custom_name = tag.as_ref().and_then(read_text),
+            "minecraft:custom_name" => self.custom_name = tag.as_ref().and_then(text_tag),
             _ => self.set_other(id, tag),
         }
     }
@@ -289,8 +289,17 @@ impl ItemStack {
     pub fn repair_cost(&self) -> u32 {
         self.data().map_or(0, |d| d.repair_cost)
     }
-    pub fn custom_name(&self) -> Option<&str> {
-        self.data().and_then(|d| d.custom_name.as_deref())
+    /// The custom name's words, without its style.
+    pub fn custom_name(&self) -> Option<String> {
+        self.data()
+            .and_then(|d| d.custom_name.as_ref())
+            .and_then(read_text)
+    }
+    /// `ItemStack.getCustomName`: the custom name with its style.
+    pub fn custom_name_text(&self) -> Option<horizon_client_core::text::Text> {
+        self.data()
+            .and_then(|d| d.custom_name.as_ref())
+            .map(horizon_client_core::component::name_text)
     }
     /// `minecraft:item_name` in the current language (`getItemName`'s
     /// component). It stays in the patch as loaded, so a translatable name
@@ -415,6 +424,11 @@ fn read_text(t: &Tag) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// A text component's tag kept whole (the forms `read_text` reads), so its style survives.
+fn text_tag(t: &Tag) -> Option<Tag> {
+    read_text(t).map(|_| t.clone())
 }
 
 /// A `FireworkExplosion` as vanilla's codec writes it (defaults omitted).
@@ -591,7 +605,7 @@ pub fn components_tag(damage: u32, data: Option<&StackData>) -> Option<Tag> {
             entries.push(("minecraft:repair_cost", Tag::Int(d.repair_cost as i32)));
         }
         if let Some(name) = &d.custom_name {
-            entries.push(("minecraft:custom_name", Tag::String(name.as_str().into())));
+            entries.push(("minecraft:custom_name", name.clone()));
         }
         if let Some(potion) = &d.potion {
             entries.push((
@@ -797,7 +811,7 @@ pub fn decode_components(components: Option<&Tag>) -> (u32, Option<Box<StackData
             .and_then(int)
             .unwrap_or(0)
             .max(0) as u32,
-        custom_name: c.get("minecraft:custom_name").and_then(read_text),
+        custom_name: c.get("minecraft:custom_name").and_then(text_tag),
         potion,
         map_id: c.get("minecraft:map_id").and_then(int).map(|v| v as i32),
         banner_patterns: crate::banner_layer::layers_from_nbt(c.get("minecraft:banner_patterns")),
@@ -975,7 +989,7 @@ mod tests {
         stack.enchant("minecraft:sharpness", 3);
         stack.enchant("minecraft:unbreaking", 2);
         stack.data_mut().repair_cost = 3;
-        stack.data_mut().custom_name = Some("Blade".into());
+        stack.data_mut().custom_name = Some(Tag::String("Blade".into()));
         let tag = encode_components(&stack).expect("components");
         let (damage, extra) = decode_components(Some(&tag));
         assert_eq!(damage, 12);
@@ -987,7 +1001,7 @@ mod tests {
         assert_eq!(back.enchantment_level("minecraft:sharpness"), 3);
         assert_eq!(back.enchantment_level("minecraft:unbreaking"), 2);
         assert_eq!(back.repair_cost(), 3);
-        assert_eq!(back.custom_name(), Some("Blade"));
+        assert_eq!(back.custom_name().as_deref(), Some("Blade"));
     }
 
     #[test]
@@ -1021,9 +1035,30 @@ mod tests {
         let components = Tag::compound([("minecraft:custom_name", name)]);
         let (_, extra) = decode_components(Some(&components));
         assert_eq!(
-            extra.and_then(|d| d.custom_name.clone()).as_deref(),
+            extra
+                .and_then(|d| d.custom_name.as_ref().and_then(read_text))
+                .as_deref(),
             Some("Games Right click")
         );
+    }
+
+    #[test]
+    fn custom_name_keeps_its_style() {
+        // A server's coloured name (#3770): the component stays whole, not just its words.
+        let name = Tag::compound([
+            ("color", Tag::String("gold".into())),
+            ("italic", Tag::Byte(0)),
+            ("text", Tag::String("Test".into())),
+        ]);
+        let components = Tag::compound([("minecraft:custom_name", name.clone())]);
+        let (_, extra) = decode_components(Some(&components));
+        let stack = ItemStack {
+            extra,
+            ..ItemStack::new("minecraft:diamond", 1)
+        };
+        assert_eq!(stack.custom_name().as_deref(), Some("Test"));
+        let saved = encode_components(&stack).expect("components");
+        assert_eq!(saved.get("minecraft:custom_name"), Some(&name));
     }
 
     #[test]

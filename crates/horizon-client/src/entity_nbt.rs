@@ -2605,7 +2605,7 @@ pub fn bucket_data(m: &Mob) -> Tag {
 }
 pub fn bucket_components(m: &Mob) -> crate::item_data::StackData {
     let mut data = crate::item_data::StackData {
-        custom_name: m.custom_name.clone(),
+        custom_name: m.custom_name.as_deref().map(|n| Tag::String(n.into())),
         ..Default::default()
     };
     data.set_other("minecraft:bucket_entity_data", Some(bucket_data(m)));
@@ -2644,8 +2644,8 @@ pub fn load_bucket_data(m: &mut Mob, stack: &crate::items::ItemStack) {
     let Some(components) = stack.data() else {
         return;
     };
-    if let Some(name) = &components.custom_name {
-        m.custom_name = Some(name.clone());
+    if let Some(name) = stack.custom_name() {
+        m.custom_name = Some(name);
     }
     if let Some(data) = components.other("minecraft:bucket_entity_data") {
         if let Some(v) = number(data.get("Age")) {

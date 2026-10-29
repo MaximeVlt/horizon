@@ -1031,9 +1031,9 @@ impl Game<'_> {
     pub(super) fn stack_display_name(&self, s: &ItemStack) -> Text {
         let item = &*s.item;
         let empty = item == "minecraft:air" || s.count == 0;
-        let custom = s.custom_name();
-        let hover = if let Some(c) = custom {
-            Text::literal(c)
+        let custom = s.custom_name_text();
+        let hover = if let Some(c) = &custom {
+            c.clone()
         } else if let Some(title) = s
             .data()
             .and_then(|d| d.written.as_ref())
